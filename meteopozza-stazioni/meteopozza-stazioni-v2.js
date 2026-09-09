@@ -35,9 +35,6 @@ function numberValue(value) {
 function normalize12h(hour, suffix) {
   let h = Number(hour);
   const s = String(suffix || "").toUpperCase();
-  // Il titolo FassaWEB può mostrare, per esempio, "20:00 PM": se l'ora è
-  // già in formato 24h ignoriamo il suffisso. Per min/max (1:58 PM, 7:19 AM)
-  // applichiamo invece la normale conversione 12h -> 24h.
   if (h <= 12 && s) {
     if (s === "PM" && h < 12) h += 12;
     if (s === "AM" && h === 12) h = 0;
@@ -75,21 +72,21 @@ function parsePozza(html) {
 
   const stamp = text.match(/Dati rilevati il\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s+alle\s+(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
 
-  // FassaWEB usa una tabella con una prima riga di intestazioni
-  // "Attuale Minima Massima" e una seconda riga con i tre valori.
-  // Dopo cleanText() l'ordine diventa quindi:
-  // Temperature Attuale Minima Massima 22.2 °C 11.8 °C alle ... 27.8 °C alle ...
   const temp = text.match(
     /Temperature\s+Attuale\s+Minima\s+Massima\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+alle\s+(\d{1,2}):(\d{2})\s*(AM|PM)?\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+alle\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/i
   );
 
-  // Anche pressione e umidità sono due colonne della stessa tabella:
-  // le due intestazioni compaiono prima, poi i rispettivi valori.
-  const pressureHumidity = text.match(
-    /Pressione assoluta\s+Umidità relativa\s+(-?\d+(?:[.,]\d+)?)\s*hPa\s+Variazione nelle 3 ore precedenti:\s*(-?\d+(?:[.,]\d+)?)\s*hPa\s+(\d+(?:[.,]\d+)?)\s*%/i
-  );
+  // Pressione e umidita vengono lette separatamente: nella pagina FassaWEB
+  // sono colonne della stessa tabella e il markup puo cambiare senza cambiare
+  // l'ordine visivo. Evitiamo quindi che un problema nella pressione faccia
+  // diventare null anche l'umidita.
+  const pressure = text.match(/Pressione assoluta[\s\S]{0,240}?(-?\d+(?:[.,]\d+)?)\s*hPa/i);
+  const pressureChange = text.match(/Variazione nelle 3 ore precedenti\s*:\s*(-?\d+(?:[.,]\d+)?)\s*hPa/i);
+  const humidity =
+    text.match(/Umidit(?:à|a)\s+relativa[\s\S]{0,320}?(\d+(?:[.,]\d+)?)\s*%/i) ||
+    text.match(/Variazione nelle 3 ore precedenti[\s\S]{0,160}?hPa\s+(\d+(?:[.,]\d+)?)\s*%/i);
 
-  if (!temp && !pressureHumidity) throw new Error("Campi principali Pozza non trovati");
+  if (!temp && !pressure && !humidity) throw new Error("Campi principali Pozza non trovati");
 
   let aggiornamento = null;
   if (stamp) {
@@ -109,10 +106,10 @@ function parsePozza(html) {
       max: numberValue(temp[6]),
       ora_max: clock24(temp[7], temp[8], temp[9])
     } : null,
-    umidita: { attuale: pressureHumidity ? numberValue(pressureHumidity[3]) : null },
-    pressione: pressureHumidity ? {
-      attuale: numberValue(pressureHumidity[1]),
-      variazione_3h: numberValue(pressureHumidity[2])
+    umidita: { attuale: humidity ? numberValue(humidity[1]) : null },
+    pressione: pressure ? {
+      attuale: numberValue(pressure[1]),
+      variazione_3h: pressureChange ? numberValue(pressureChange[1]) : null
     } : null,
     aggiornamento
   };
@@ -182,10 +179,8 @@ export default {
       return baseWorker.fetch(request, env, ctx);
     }
 
-    // Cache breve dell'intero JSON. La chiave ignora il parametro ?_=Date.now()
-    // usato dal frontend, così aperture ravvicinate non riscaricano tutte le fonti.
     const cache = typeof caches !== "undefined" ? caches.default : null;
-    const cacheKey = new Request(`${url.origin}${url.pathname}?edge=v2`, { method: "GET" });
+    const cacheKey = new Request(`${url.origin}${url.pathname}?edge=v3`, { method: "GET" });
     if (cache) {
       const hit = await cache.match(cacheKey);
       if (hit) return hit;
