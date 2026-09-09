@@ -74,11 +74,22 @@ function parsePozza(html) {
   const text = cleanText(html);
 
   const stamp = text.match(/Dati rilevati il\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s+alle\s+(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
-  const temp = text.match(/Temperature\s+Attuale\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+Minima\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+alle\s+(\d{1,2}):(\d{2})\s*(AM|PM)?\s+Massima\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+alle\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
-  const pressure = text.match(/Pressione assoluta\s+(-?\d+(?:[.,]\d+)?)\s*hPa\s+Variazione nelle 3 ore precedenti:\s*(-?\d+(?:[.,]\d+)?)\s*hPa/i);
-  const humidity = text.match(/Umidità relativa\s+(\d+(?:[.,]\d+)?)\s*%/i);
 
-  if (!temp && !humidity) throw new Error("Campi principali Pozza non trovati");
+  // FassaWEB usa una tabella con una prima riga di intestazioni
+  // "Attuale Minima Massima" e una seconda riga con i tre valori.
+  // Dopo cleanText() l'ordine diventa quindi:
+  // Temperature Attuale Minima Massima 22.2 °C 11.8 °C alle ... 27.8 °C alle ...
+  const temp = text.match(
+    /Temperature\s+Attuale\s+Minima\s+Massima\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+alle\s+(\d{1,2}):(\d{2})\s*(AM|PM)?\s+(-?\d+(?:[.,]\d+)?)\s*°C\s+alle\s+(\d{1,2}):(\d{2})\s*(AM|PM)?/i
+  );
+
+  // Anche pressione e umidità sono due colonne della stessa tabella:
+  // le due intestazioni compaiono prima, poi i rispettivi valori.
+  const pressureHumidity = text.match(
+    /Pressione assoluta\s+Umidità relativa\s+(-?\d+(?:[.,]\d+)?)\s*hPa\s+Variazione nelle 3 ore precedenti:\s*(-?\d+(?:[.,]\d+)?)\s*hPa\s+(\d+(?:[.,]\d+)?)\s*%/i
+  );
+
+  if (!temp && !pressureHumidity) throw new Error("Campi principali Pozza non trovati");
 
   let aggiornamento = null;
   if (stamp) {
@@ -98,10 +109,10 @@ function parsePozza(html) {
       max: numberValue(temp[6]),
       ora_max: clock24(temp[7], temp[8], temp[9])
     } : null,
-    umidita: { attuale: humidity ? numberValue(humidity[1]) : null },
-    pressione: pressure ? {
-      attuale: numberValue(pressure[1]),
-      variazione_3h: numberValue(pressure[2])
+    umidita: { attuale: pressureHumidity ? numberValue(pressureHumidity[3]) : null },
+    pressione: pressureHumidity ? {
+      attuale: numberValue(pressureHumidity[1]),
+      variazione_3h: numberValue(pressureHumidity[2])
     } : null,
     aggiornamento
   };
