@@ -3,3 +3,4 @@ Aggiornamento automatico worker per progetto Meteo fassa per dati metereologici 
 al momento caricati  worker per:
 * meteopozza-stazioni
 * meteopozza-previsioni
+* gite-stazioni-aggregator
