@@ -1,15 +1,94 @@
 // ======================================================
 // GITE METEO AGGREGATOR
-// Versione 1.0
+// Versione 1.1
 //
 // Service Bindings richiesti:
 // FASSA    -> gitemeteofassa
 // TRENTINO -> gite-meteotrentino
 // PREDAZZO -> gite-meteopredazzo-rodella
 //
-// /          tutte le stazioni
-// ?stations  elenco sintetico
+// /                   tutte le stazioni e le zone
+// /status             controllo rapido di fonti e stazioni
+// /zone/{id}          stazioni di una zona
+// ?stations           elenco sintetico
 // ======================================================
+
+
+const SCHEMA_VERSION = "1.1";
+const TIMEZONE = "Europe/Rome";
+const CACHE_TTL_SECONDS = 120;
+
+
+/*
+  Le associazioni geografiche vivono nell'aggregatore centrale.
+  I Worker sorgente continuano a occuparsi soltanto della raccolta dati.
+
+  L'ordine delle chiavi e' anche l'ordine di presentazione consigliato.
+  Una stazione puo' appartenere a piu' zone.
+*/
+const ZONES = [
+  {
+    id: "catinaccio",
+    name: "Catinaccio",
+    stationKeys: [
+      "fassa:gardeccia",
+      "fassa:principe",
+      "trentino:costalunga",
+      "trentino:campitello"
+    ]
+  },
+  {
+    id: "sassolungo_sella",
+    name: "Sella e Sassolungo",
+    stationKeys: [
+      "fassa:passosella",
+      "fassa:sasspordoi",
+      "fassa:pizboe",
+      "fassa:coldeirossi",
+      "predazzo:colrodella"
+    ]
+  },
+  {
+    id: "marmolada_val_s_nicolo",
+    name: "Marmolada e Val San Nicolò",
+    stationKeys: [
+      "trentino:sasdelmul",
+      "trentino:ciampac",
+      "trentino:fedaia",
+      "fassa:coldeirossi"
+    ]
+  },
+  {
+    id: "moena_latemar",
+    name: "Moena e Latemar",
+    stationKeys: [
+      "fassa:rolle",
+      "fassa:paradiso",
+      "predazzo:torredipisa",
+      "predazzo:passofeudo",
+      "predazzo:gardone"
+    ]
+  }
+];
+
+
+const ZONE_ALIASES = {
+  sella: "sassolungo_sella",
+  sella_sassolungo: "sassolungo_sella",
+  marmolada: "marmolada_val_s_nicolo",
+  moena: "moena_latemar"
+};
+
+
+const STATION_ZONES = new Map();
+
+for (const zone of ZONES) {
+  for (const key of zone.stationKeys) {
+    const zoneIds = STATION_ZONES.get(key) || [];
+    zoneIds.push(zone.id);
+    STATION_ZONES.set(key, zoneIds);
+  }
+}
 
 
 // ======================================================
@@ -32,7 +111,7 @@ function json(data, status = 200) {
       status,
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "public, max-age=120",
+        "Cache-Control": `public, max-age=${CACHE_TTL_SECONDS}`,
         ...corsHeaders()
       }
     }
@@ -104,6 +183,10 @@ function directionFromDegrees(value) {
 function normalize(station, family) {
 
   const s = station || {};
+  const stationKey = `${family}:${s.id}`;
+  const zones = [
+    ...(STATION_ZONES.get(stationKey) || [])
+  ];
 
 
   // --------------------------
@@ -184,10 +267,15 @@ function normalize(station, family) {
       s.id || null,
 
     key:
-      `${family}:${s.id}`,
+      stationKey,
 
     name:
       s.name || s.id || null,
+
+    zones,
+
+    primary_zone:
+      zones[0] || null,
 
     altitude:
       num(s.altitude),
@@ -496,6 +584,112 @@ async function fetchService(
 
 
 // ======================================================
+// ZONE E RIEPILOGO
+// ======================================================
+
+function stationSummary(station) {
+  return {
+    id: station.id,
+    key: station.key,
+    name: station.name,
+    altitude: station.altitude,
+    family: station.family,
+    source: station.source,
+    status: station.status,
+    zones: station.zones,
+    primary_zone: station.primary_zone,
+    updated: station.updated,
+    updatedText: station.updatedText,
+    fetchedAt: station.fetchedAt
+  };
+}
+
+
+function buildZone(zone, stations) {
+  const stationByKey = new Map(
+    stations.map(station => [station.key, station])
+  );
+
+  const zoneStations = zone.stationKeys
+    .map(key => stationByKey.get(key))
+    .filter(Boolean);
+
+  const missingStationKeys = zone.stationKeys
+    .filter(key => !stationByKey.has(key));
+
+  return {
+    id: zone.id,
+    name: zone.name,
+    expected_station_count: zone.stationKeys.length,
+    station_count: zoneStations.length,
+    missing_station_keys: missingStationKeys,
+    stations: zoneStations
+  };
+}
+
+
+function buildZones(stations) {
+  return ZONES.map(zone => buildZone(zone, stations));
+}
+
+
+function resolveZone(rawId) {
+  let requestedId;
+
+  try {
+    requestedId = decodeURIComponent(
+      String(rawId || "")
+    ).toLowerCase();
+  } catch {
+    return null;
+  }
+
+  const zoneId = ZONE_ALIASES[requestedId] || requestedId;
+  return ZONES.find(zone => zone.id === zoneId) || null;
+}
+
+
+function buildOverview(stations, results) {
+  const onlineStations = stations.filter(
+    station => station.status === "online"
+  ).length;
+
+  const families = {};
+
+  for (const result of results) {
+    const familyStations = stations.filter(
+      station => station.family === result.id
+    );
+
+    families[result.id] = {
+      total: familyStations.length,
+      online: familyStations.filter(
+        station => station.status === "online"
+      ).length,
+      offline: familyStations.filter(
+        station => station.status !== "online"
+      ).length,
+      source_status: result.status
+    };
+  }
+
+  return {
+    total_stations: stations.length,
+    online_stations: onlineStations,
+    offline_stations: stations.length - onlineStations,
+    all_online:
+      results.every(result => result.status === "online") &&
+      onlineStations === stations.length,
+    families,
+    unassigned_stations: stations
+      .filter(station => station.zones.length === 0)
+      .map(stationSummary),
+    stations: stations.map(stationSummary)
+  };
+}
+
+
+// ======================================================
 // WORKER
 // ======================================================
 
@@ -526,6 +720,19 @@ export default {
 
     const url =
       new URL(request.url);
+
+    const pathname =
+      url.pathname.replace(/\/+$/, "") || "/";
+
+
+    if (request.method !== "GET") {
+      return json(
+        {
+          error: "Metodo non consentito"
+        },
+        405
+      );
+    }
 
 
     // ==================================================
@@ -580,55 +787,107 @@ export default {
     }
 
 
+    const generatedAt =
+      new Date().toISOString();
+
+    const sources =
+      results.map(
+        result => ({
+          id: result.id,
+          status: result.status,
+          version: result.version,
+          generated_at: result.generatedAt,
+          generatedAt: result.generatedAt,
+          count: result.count,
+          error: result.error || null
+        })
+      );
+
+    const zones =
+      buildZones(stations);
+
+    const overview =
+      buildOverview(stations, results);
+
+
+    // ==================================================
+    // /status
+    // ==================================================
+
+    if (pathname === "/status") {
+      return json({
+        schema_version: SCHEMA_VERSION,
+        generated_at: generatedAt,
+        timezone: TIMEZONE,
+        overview,
+        sources
+      });
+    }
+
+
+    // ==================================================
+    // /zone/{id}
+    // ==================================================
+
+    const zoneMatch =
+      pathname.match(/^\/zone\/([^/]+)$/);
+
+    if (zoneMatch) {
+      const zone = resolveZone(zoneMatch[1]);
+
+      if (!zone) {
+        return json(
+          {
+            schema_version: SCHEMA_VERSION,
+            generated_at: generatedAt,
+            error: "Zona non trovata",
+            available_zones: ZONES.map(item => item.id)
+          },
+          404
+        );
+      }
+
+      return json({
+        schema_version: SCHEMA_VERSION,
+        generated_at: generatedAt,
+        timezone: TIMEZONE,
+        zone: buildZone(zone, stations)
+      });
+    }
+
+
     // ==================================================
     // ?stations
     // VERSIONE LEGGERA
     // ==================================================
 
     if (
-      url.searchParams
-        .has("stations")
+      pathname === "/stations" ||
+      url.searchParams.has("stations")
     ) {
 
       return json({
 
+        schema_version:
+          SCHEMA_VERSION,
+
+        generated_at:
+          generatedAt,
+
+        timezone:
+          TIMEZONE,
+
         version:
-          "1.0",
+          SCHEMA_VERSION,
 
         generatedAt:
-          new Date()
-            .toISOString(),
+          generatedAt,
 
         count:
           stations.length,
 
         stations:
-          stations.map(
-            s => ({
-
-              id:
-                s.id,
-
-              key:
-                s.key,
-
-              name:
-                s.name,
-
-              altitude:
-                s.altitude,
-
-              family:
-                s.family,
-
-              source:
-                s.source,
-
-              status:
-                s.status
-
-            })
-          )
+          stations.map(stationSummary)
       });
     }
 
@@ -639,12 +898,33 @@ export default {
 
     return json({
 
+      schema_version:
+        SCHEMA_VERSION,
+
+      generated_at:
+        generatedAt,
+
+      timezone:
+        TIMEZONE,
+
+      cache_ttl_seconds:
+        CACHE_TTL_SECONDS,
+
+      overview,
+
+      total_unique_stations:
+        stations.length,
+
+      total_zones:
+        zones.length,
+
+      zones,
+
       version:
-        "1.0",
+        SCHEMA_VERSION,
 
       generatedAt:
-        new Date()
-          .toISOString(),
+        generatedAt,
 
       count:
         stations.length,
@@ -653,29 +933,7 @@ export default {
       // Stato dei tre Worker sorgente
 
       sources:
-        results.map(
-          r => ({
-
-            id:
-              r.id,
-
-            status:
-              r.status,
-
-            version:
-              r.version,
-
-            generatedAt:
-              r.generatedAt,
-
-            count:
-              r.count,
-
-            error:
-              r.error || null
-
-          })
-        ),
+        sources,
 
 
       // Tutte le stazioni
