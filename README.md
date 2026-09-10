@@ -4,4 +4,4 @@ al momento caricati  worker per:
 * meteopozza-stazioni
 * meteopozza-previsioni
 * gite-stazioni-aggregator
-* gite-meteotrentino
+
