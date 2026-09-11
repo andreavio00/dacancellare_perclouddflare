@@ -1,6 +1,6 @@
 // ======================================================
 // GITE METEO AGGREGATOR
-// Versione 1.1
+// Versione 1.2
 //
 // Service Bindings richiesti:
 // FASSA    -> gitemeteofassa
@@ -14,9 +14,53 @@
 // ======================================================
 
 
-const SCHEMA_VERSION = "1.1";
+const SCHEMA_VERSION = "1.2";
 const TIMEZONE = "Europe/Rome";
 const CACHE_TTL_SECONDS = 120;
+
+
+/*
+  Pagine pubbliche delle fonti, pensate per il collegamento dalla UI.
+  Non sono necessariamente gli endpoint tecnici usati dai Worker.
+*/
+const METEOTRENTINO_SOURCE_URL =
+  "https://www.meteotrentino.it/dati/meteo/ultimi-dati-meteo/";
+
+const STATION_SOURCE_URLS = {
+  "fassa:gardeccia":
+    "https://www.meteosystem.com/wlip/gardeccia/dati.php",
+  "fassa:principe":
+    "https://www.dolomitesmeteo.it/rosengartenpassoprincipe/",
+  "fassa:sasspordoi":
+    "https://www.dolomitesmeteo.it/sasspordoi/",
+  "fassa:rolle":
+    "https://www.primierometeo.it/passorolle/",
+  "fassa:paradiso":
+    "https://www.primierometeo.it/paradiso/",
+  "fassa:passosella":
+    "https://www.dolomitesmeteo.it/passosella/tabella.html",
+  "fassa:pizboe":
+    "https://www.dolomitesmeteo.it/pizboe/",
+  "fassa:coldeirossi":
+    "https://www.dolomitesmeteo.it/coldeirossi/tabella.php",
+
+  "trentino:moena": METEOTRENTINO_SOURCE_URL,
+  "trentino:gries": METEOTRENTINO_SOURCE_URL,
+  "trentino:costalunga": METEOTRENTINO_SOURCE_URL,
+  "trentino:campitello": METEOTRENTINO_SOURCE_URL,
+  "trentino:fedaia": METEOTRENTINO_SOURCE_URL,
+  "trentino:ciampac": METEOTRENTINO_SOURCE_URL,
+  "trentino:sasdelmul": METEOTRENTINO_SOURCE_URL,
+
+  "predazzo:colrodella":
+    "https://icarusfassa.it/stazione-meteo-icarus-flying-team/",
+  "predazzo:gardone":
+    "https://www.meteo-predazzo.it/gardone-1650-m-slm/",
+  "predazzo:passofeudo":
+    "https://www.meteo-predazzo.it/passo-feudo-2200-m-slm/",
+  "predazzo:torredipisa":
+    "https://www.meteo-predazzo.it/rifugio-torre-di-pisa-2671-m-slm/"
+};
 
 
 /*
@@ -290,6 +334,12 @@ function normalize(station, family) {
 
     source:
       s.source || family,
+
+    sourceUrl:
+      s.sourceUrl ||
+      s.url ||
+      STATION_SOURCE_URLS[stationKey] ||
+      null,
 
     status:
       s.status || "unknown",
@@ -595,6 +645,7 @@ function stationSummary(station) {
     altitude: station.altitude,
     family: station.family,
     source: station.source,
+    sourceUrl: station.sourceUrl,
     status: station.status,
     zones: station.zones,
     primary_zone: station.primary_zone,

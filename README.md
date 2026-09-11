@@ -9,8 +9,8 @@ al momento caricati  worker per:
 ## Stazioni MeteoTrentino per le escursioni
 
 `gite-meteotrentino` raccoglie sette stazioni. Tra queste è compresa
-`campitello`, stazione MeteoTrentino `T0229`, situata presso Malga Do Col
-D'Aura a 2050 m e utilizzata per la zona Catinaccio.
+`campitello`, stazione MeteoTrentino `T0229`, presentata come **Val Duron –
+Malga do Col d’Aura**, situata a 2050 m e utilizzata per la zona Catinaccio.
 
 ## Zone dell'aggregatore stazioni
 
@@ -30,6 +30,11 @@ Endpoint principali:
 * `/zone/{id}` stazioni di una sola zona
 * `/stations` oppure `/?stations` elenco sintetico
 
-Le risposte della versione 1.1 aggiungono `schema_version`, `generated_at`,
+Le risposte dalla versione 1.1 aggiungono `schema_version`, `generated_at`,
 `timezone`, `zones` e `primary_zone`. I campi precedenti `version`,
 `generatedAt`, `count` e `stations` restano disponibili per compatibilità.
+
+La versione 1.2 aggiunge `sourceUrl` a ogni stazione e ai riepiloghi leggeri.
+Il campo punta alla pagina pubblica della fonte, adatta a essere aperta dal
+frontend; non espone necessariamente l'endpoint tecnico usato per raccogliere
+i dati.

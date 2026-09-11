@@ -2,7 +2,7 @@ const STATIONS = {
     moena:      { code: "T0096", name: "Moena (Diga Pezzè)" },
       gries:      { code: "T0437", name: "Canazei (Gries)" },
         costalunga: { code: "T0094", name: "Passo Costalunga" },
-          campitello: { code: "T0229", name: "Campitello (Malga Do Col D'Aura)" },
+          campitello: { code: "T0229", name: "Val Duron – Malga do Col d’Aura" },
             fedaia:     { code: "T0092", name: "Pian Fedaia (Diga)" },
               ciampac:    { code: "T0403", name: "Canazei (Ciampac)" },
                 sasdelmul:  { code: "T0404", name: "Marmolada (Sas del Mul)" }
