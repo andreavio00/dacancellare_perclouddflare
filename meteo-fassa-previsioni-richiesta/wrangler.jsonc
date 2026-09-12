@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "meteo-fassa-previsioni-richiesta",
+  "main": "meteo-fassa-previsioni-richiesta.js",
+  "compatibility_date": "2026-09-12",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "APP_ORIGIN": "https://andreavio00.github.io/meteo-fassa/",
+    "NOMINATIM_BASE_URL": "https://nominatim.openstreetmap.org/search",
+    "NOMINATIM_MIN_INTERVAL_MS": "1100",
+    "UPSTREAM_TIMEOUT_MS": "12000"
+  }
+}
