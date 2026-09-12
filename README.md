@@ -8,6 +8,7 @@ al momento caricati  worker per:
 * gite-previsioni-meteoreport
 * gite-previsioni-open-meteo
 * gite-previsioni-aggregator
+* meteo-fassa-previsioni-richiesta
 
 ## Stazioni MeteoTrentino per le escursioni
 
