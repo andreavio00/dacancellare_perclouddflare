@@ -5,6 +5,7 @@ al momento caricati  worker per:
 * meteopozza-previsioni
 * gite-meteotrentino
 * gite-meteo-aggregator
+* gite-previsioni-meteoreport
 
 ## Stazioni MeteoTrentino per le escursioni
 
