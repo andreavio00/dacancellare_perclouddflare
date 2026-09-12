@@ -1,5 +1,5 @@
 {
   "name": "gite-meteo-aggregator",
-  "main": "gite-gite-meteo-aggregator-aggregator.js",
+  "main": "gite-meteo-aggregator.js",
   "compatibility_date": "2026-09-12"
 }
