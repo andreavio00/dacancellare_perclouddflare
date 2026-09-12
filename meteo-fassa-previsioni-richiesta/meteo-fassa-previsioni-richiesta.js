@@ -316,6 +316,33 @@ function addMinutesLocal(iso, minutes) {
   return date.toISOString().slice(0, 16);
 }
 
+function localDateTimeParts(timeZone, instant = new Date()) {
+  const requestedZone = safeText(timeZone, 50) || "Europe/Rome";
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: requestedZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(instant);
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return {
+      isoMinute: `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`,
+      secondsOfDay: Number(values.hour) * 3600 + Number(values.minute) * 60 + Number(values.second)
+    };
+  } catch {
+    if (requestedZone !== "Europe/Rome") return localDateTimeParts("Europe/Rome", instant);
+    return {
+      isoMinute: instant.toISOString().slice(0, 16),
+      secondsOfDay: instant.getUTCHours() * 3600 + instant.getUTCMinutes() * 60 + instant.getUTCSeconds()
+    };
+  }
+}
+
 function weightedWindDirection(directions, speeds) {
   let x = 0;
   let y = 0;
@@ -1217,6 +1244,29 @@ function firstThreeForecastDays(periods) {
   return periods.filter(period => allowedDates.has(period.date));
 }
 
+function futureForecastPeriods(periods, timeZone) {
+  const nowLocal = localDateTimeParts(timeZone).isoMinute;
+  const futureOrCurrent = periods.filter(period => {
+    const end = safeText(period?.end, 40)?.slice(0, 16);
+    return Boolean(end) && end > nowLocal;
+  });
+  return firstThreeForecastDays(futureOrCurrent);
+}
+
+function forecastCacheTtl(id) {
+  try {
+    const candidate = decodeCandidateId(id);
+    const { secondsOfDay } = localDateTimeParts(candidate.timezone);
+    const nextBoundary = [11, 14, 17, 20]
+      .map(hour => hour * 3600)
+      .find(boundary => boundary > secondsOfDay);
+    if (nextBoundary === undefined) return FORECAST_CACHE_TTL;
+    return Math.max(1, Math.min(FORECAST_CACHE_TTL, nextBoundary - secondsOfDay));
+  } catch {
+    return FORECAST_CACHE_TTL;
+  }
+}
+
 function normalizeOpenMeteoPeriods(data) {
   const hourly = data?.hourly;
   if (!hourly || !Array.isArray(hourly.time)) {
@@ -1301,7 +1351,7 @@ function normalizeOpenMeteoPeriods(data) {
     });
   }
 
-  return firstThreeForecastDays(periods);
+  return periods;
 }
 
 function normalizeMeteoReportPeriods(data) {
@@ -1357,7 +1407,7 @@ function normalizeMeteoReportPeriods(data) {
     };
   }).filter(Boolean).sort((first, second) => first.start.localeCompare(second.start));
 
-  return firstThreeForecastDays(periods);
+  return periods;
 }
 
 function groupPeriodsByDay(periods) {
@@ -1554,6 +1604,15 @@ function fallbackReason(error) {
 }
 
 function buildForecastPayload(candidate, result, fallback, reason) {
+  const periods = futureForecastPeriods(result.periods, result.timezone);
+  if (!periods.length) {
+    throw new AppError(
+      503,
+      "FORECAST_UNAVAILABLE",
+      "La fonte non ha prodotto fasce attuali o future per la località scelta.",
+      true
+    );
+  }
   const elevation = candidate.elevation_m ?? result.model_point?.elevation_m ?? null;
   const location = {
     id: candidate.opaque_id,
@@ -1578,7 +1637,7 @@ function buildForecastPayload(candidate, result, fallback, reason) {
     },
     model_point: result.model_point,
     forecast_location: result.forecast_location,
-    periods_3h: result.periods
+    periods_3h: periods
   };
 
   return {
@@ -1595,7 +1654,7 @@ function buildForecastPayload(candidate, result, fallback, reason) {
       source_start: result.source_start,
       source_end: result.source_end
     },
-    coverage: buildCoverage(result.periods),
+    coverage: buildCoverage(periods),
     attributions: forecastAttributions(candidate, result.provider)
   };
 }
@@ -1689,9 +1748,10 @@ export default {
       if (path === "/forecast") {
         const id = url.searchParams.get("id") ?? "";
         const cacheKey = `forecast/${encodeURIComponent(id)}`;
-        return await cachedResponse(cacheKey, FORECAST_CACHE_TTL, context, async () => {
+        const cacheTtl = forecastCacheTtl(id);
+        return await cachedResponse(cacheKey, cacheTtl, context, async () => {
           const payload = await handleForecast(url, env);
-          return jsonResponse(payload, 200, FORECAST_CACHE_TTL);
+          return jsonResponse(payload, 200, cacheTtl);
         });
       }
 
