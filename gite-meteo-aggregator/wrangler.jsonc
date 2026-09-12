@@ -1,19 +1,5 @@
 {
-  "name": "gite-meteo-aggregator",
-  "main": "gite-meteo-aggregator.js",
-  "compatibility_date": "2026-09-10",
-  "services": [
-    {
-      "binding": "FASSA",
-      "service": "gitemeteofassa"
-    },
-    {
-      "binding": "TRENTINO",
-      "service": "gite-meteotrentino"
-    },
-    {
-      "binding": "PREDAZZO",
-      "service": "gite-meteopredazzo-rodella"
-    }
-  ]
+  "name": "gite-previsioni-aggregator",
+  "main": "gite-previsioni-aggregator.js",
+  "compatibility_date": "2026-09-12"
 }
